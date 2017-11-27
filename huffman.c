@@ -183,8 +183,8 @@ int encode(const char *name) {
     for (c = 0; c < 256; c++)
         if (table[c] >> 8)
             break;
-    if (c == 255) {
-        c--;
+    if (c >= 255) {
+        c = 254;
     }
 
     tree = build_huffman_tree(table + c, 256 - c);
