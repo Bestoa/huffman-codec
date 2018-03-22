@@ -8,6 +8,9 @@
 #define RSETB(x, b) ((x) &= (~((1) << (b))))
 #define GETB(x, b) ((x) & (1 << (b)))
 
+#define TABLE_SIZE (256)
+#define BUFFER_SIZE (65536)
+
 struct huffman_node {
     uint64_t weight;
     uint8_t value;
@@ -18,7 +21,56 @@ struct huffman_node {
 struct huffman_code { 
     uint8_t *code;
     uint8_t length;
-}huffman_code_list[256];
+}huffman_code_list[TABLE_SIZE];
+
+struct buffer {
+    FILE *fp;
+    uint8_t buffer[BUFFER_SIZE];
+    uint64_t pos;
+    uint64_t used;
+    uint64_t end;
+};
+
+void init_readbuffer(struct buffer *b) {
+    long cur = ftell(b->fp);
+    fseek(b->fp, 0L, SEEK_END);
+    b->end = ftell(b->fp) - cur;
+    fseek(b->fp, cur, SEEK_SET);
+}
+
+int is_buffer_end(struct buffer *b) {
+    if (b->used == b->end)
+        return 1;
+    return 0;
+}
+
+int buffered_fgetc(struct buffer *b) {
+    int ret_c = -1;
+    if (b->pos == 0) {
+        fread(b->buffer, 1, sizeof(b->buffer), b->fp);
+    }
+    ret_c = b->buffer[b->pos++];
+    b->used++;
+    if (b->pos == sizeof(b->buffer)) {
+        b->pos = 0;
+    }
+    return ret_c;
+}
+
+void buffered_fputc(struct buffer *b, uint8_t c) {
+    b->buffer[b->pos++] = c;
+    if (b->pos == sizeof(b->buffer)) {
+        fwrite(b->buffer, 1, sizeof(b->buffer), b->fp);
+        b->pos = 0;
+    }
+}
+
+void flush_buffer(struct buffer *b) {
+    if (b->pos > 0) {
+        fwrite(b->buffer, 1, b->pos, b->fp);
+        b->pos = 0;
+    }
+}
 
 #if defined(DEBUG)
 #define INDENT (8)
@@ -39,7 +91,7 @@ void dump_huffman_tree(struct huffman_node *root, int space)
 
 void dump_huffman_code_list() {
     int i = 0, j = 0;
-    for (i = 0; i < 256; i++) {
+    for (i = 0; i < TABLE_SIZE; i++) {
         if (huffman_code_list[i].length != 0) {
             printf("value = %d, length = %d code = ", i, huffman_code_list[i].length);
             for (j = 0; j < huffman_code_list[i].length; j++) {
@@ -64,7 +116,7 @@ int table_unit_compar(const void *a, const void *b) {
 
 void clean_huffman_code_list() {
     int i = 0;
-    for (i = 0; i < 256; i++) {
+    for (i = 0; i < TABLE_SIZE; i++) {
         if (huffman_code_list[i].code)
             free(huffman_code_list[i].code);
     }
@@ -91,7 +143,7 @@ int generate_huffman_code_recusive(struct huffman_node *tree, char *code, int le
 }
 
 int generate_huffman_code(struct huffman_node *tree) {
-    char code[256] = { 0 };
+    char code[TABLE_SIZE] = { 0 };
     return generate_huffman_code_recusive(tree, code, 0);
 }
 
@@ -160,34 +212,38 @@ int encode(const char *name) {
     int c, ret = 0;
     FILE *ifp, *ofp;
     uint8_t cached_c = 0, used_bits = 0;
-    uint64_t table[256] = { 0 };
+    uint64_t table[TABLE_SIZE] = { 0 };
     struct huffman_node *tree = NULL;
     struct huffman_file_header fh;
+    struct buffer rb, wb;
 
     ifp = fopen(name, "r");
     if (!ifp) {
         printf("Open input file %s failed\n", name);
         return 1;
     }
+    ZAP(&rb);
+    rb.fp = ifp;
+    init_readbuffer(&rb);
 
-    while(!feof(ifp)) {
-        c= fgetc(ifp);
+    while(!is_buffer_end(&rb)) {
+        c = buffered_fgetc(&rb);
         table[c]++;
     }
     fseek(ifp, 0L, SEEK_SET);
 
-    for (c = 0; c < 256; c++) {
+    for (c = 0; c < TABLE_SIZE; c++) {
         table[c] = GEN_TABLE_UNIT(c, table[c]);
     }
-    qsort(table, 256, sizeof(uint64_t), table_unit_compar);
-    for (c = 0; c < 256; c++)
+    qsort(table, TABLE_SIZE, sizeof(uint64_t), table_unit_compar);
+    for (c = 0; c < TABLE_SIZE; c++)
         if (table[c] >> 8)
             break;
-    if (c >= 255) {
-        c = 254;
+    if (c > TABLE_SIZE - 2) {
+        c = TABLE_SIZE - 2;
     }
 
-    tree = build_huffman_tree(table + c, 256 - c);
+    tree = build_huffman_tree(table + c, TABLE_SIZE - c);
     if (!tree) {
         printf("Create huffman tree failed\n");
         ret = 1;
@@ -217,28 +273,35 @@ int encode(const char *name) {
     memcpy(fh.magic, MAGIC, sizeof(MAGIC));
     fh.file_size = tree->weight;
     printf("File size = %lu\n", tree->weight);
-    fh.table_size = 256 - c;
-    printf("Table size = %u\n", 256 - c);
+    fh.table_size = TABLE_SIZE - c;
+    printf("Table size = %u\n", TABLE_SIZE - c);
     fwrite(&fh, 1, sizeof(struct huffman_file_header), ofp);
-    fwrite(table + c, 256 - c, sizeof(uint64_t), ofp);
+    fwrite(table + c, TABLE_SIZE - c, sizeof(uint64_t), ofp);
 
-    while (!feof(ifp)) {
+    ZAP(&rb);
+    rb.fp = ifp;
+    init_readbuffer(&rb);
+    ZAP(&wb);
+    wb.fp = ofp;
+
+    while (!is_buffer_end(&rb)) {
         int i = 0;
-        c = fgetc(ifp);
+        c = buffered_fgetc(&rb);
         for (i = 0; i < huffman_code_list[c].length; i++) {
             if (huffman_code_list[c].code[i]) {
                 SETB(cached_c, 7 - used_bits);
             }
             used_bits++;
             if (used_bits == 8) {
-                fputc(cached_c, ofp);
+                buffered_fputc(&wb, cached_c);
                 used_bits = 0;
                 cached_c = 0;
             }
         }
     }
     if (used_bits)
-        fputc(cached_c, ofp);
+        buffered_fputc(&wb, cached_c);
+    flush_buffer(&wb);
     fclose(ofp);
 ERR_CLEAN_HUFFMAN_CODE_LIST:
     clean_huffman_code_list();
@@ -253,10 +316,11 @@ int decode(const char *name) {
     int ret = 0;
     int cached_c = 0, used_bits = 0;
     FILE *ifp, *ofp;
-    uint64_t table[256] = { 0 };
+    uint64_t table[TABLE_SIZE] = { 0 };
     uint64_t size = 0;
     struct huffman_file_header fh;
     struct huffman_node *tree = NULL,*walk;
+    struct buffer rb, wb;
 
     ifp = fopen(name, "r");
     if (!ifp) {
@@ -296,14 +360,19 @@ int decode(const char *name) {
         goto ERR_FREE_HUFFMAN_TREE;
     }
     walk = tree;
+    ZAP(&rb);
+    rb.fp = ifp;
+    init_readbuffer(&rb);
+    ZAP(&wb);
+    wb.fp = ofp;
     while (size < fh.file_size) {
         if (!used_bits) {
-            if (feof(ifp)) {
+            if (is_buffer_end(&rb)) {
                 printf("Unexpect file end, size = %lu\n", size);
                 ret = 1;
                 goto ERR_FREE_HUFFMAN_TREE;
             }
-            cached_c = fgetc(ifp);
+            cached_c = buffered_fgetc(&rb);
         }
 
         if (GETB(cached_c, 7 - used_bits))
@@ -316,11 +385,12 @@ int decode(const char *name) {
             used_bits = 0;
 
         if (!walk->left) {
-            fputc(walk->value, ofp);
+            buffered_fputc(&wb, walk->value);
             walk = tree;
             size++;
         }
     }
+    flush_buffer(&wb);
     fclose(ofp);
 ERR_FREE_HUFFMAN_TREE:
     free_huffman_tree(tree);
