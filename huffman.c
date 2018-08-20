@@ -19,7 +19,8 @@ struct huffman_node {
 };
 
 struct huffman_code { 
-    uint8_t *code;
+    /* Code len should be less than table len */
+    uint8_t code[TABLE_SIZE];
     uint8_t length;
 }huffman_code_list[TABLE_SIZE];
 
@@ -115,36 +116,24 @@ int table_unit_compar(const void *a, const void *b) {
 }
 
 void clean_huffman_code_list() {
-    int i = 0;
-    for (i = 0; i < TABLE_SIZE; i++) {
-        if (huffman_code_list[i].code)
-            free(huffman_code_list[i].code);
-    }
     ZAP(&huffman_code_list);
 }
 
-int generate_huffman_code_recusive(struct huffman_node *tree, char *code, int len) {
+void generate_huffman_code_recusive(struct huffman_node *tree, char *code, int len) {
     if (!tree->left) {
-        huffman_code_list[tree->value].code = malloc(len);
-        if (huffman_code_list[tree->value].code == NULL) {
-            return 1;
-        }
         memcpy(huffman_code_list[tree->value].code, code, len);
         huffman_code_list[tree->value].length = len;
-        return 0;
+        return;
     }
-    if (generate_huffman_code_recusive(tree->left, code, len + 1))
-        return 1;
+    generate_huffman_code_recusive(tree->left, code, len + 1);
     code[len] = 1;
-    if (generate_huffman_code_recusive(tree->right, code, len + 1))
-        return 1;
+    generate_huffman_code_recusive(tree->right, code, len + 1);
     code[len] = 0;
-    return 0;
 }
 
-int generate_huffman_code(struct huffman_node *tree) {
+void generate_huffman_code(struct huffman_node *tree) {
     char code[TABLE_SIZE] = { 0 };
-    return generate_huffman_code_recusive(tree, code, 0);
+    generate_huffman_code_recusive(tree, code, 0);
 }
 
 void free_huffman_tree(struct huffman_node *root) {
@@ -253,11 +242,7 @@ int encode(const char *name) {
     dump_huffman_tree(tree, 0);
 #endif
     clean_huffman_code_list();
-    if (generate_huffman_code(tree)) {
-        printf("Create huffman code failed\n");
-        ret = 1;
-        goto ERR_FREE_HUFFMAN_TREE;
-    }
+    generate_huffman_code(tree);
 #ifdef DEBUG
     dump_huffman_code_list();
 #endif
@@ -305,7 +290,6 @@ int encode(const char *name) {
     fclose(ofp);
 ERR_CLEAN_HUFFMAN_CODE_LIST:
     clean_huffman_code_list();
-ERR_FREE_HUFFMAN_TREE:
     free_huffman_tree(tree);
 ERR_CLOSE_INPUT_FILE:
     fclose(ifp);
