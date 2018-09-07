@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <inttypes.h>
+#include <stdint.h>
 
 #define ZAP(x) (memset((x), 0, sizeof(*(x))))
 #define SETB(x, b) ((x) |= ((1) << (b)))
