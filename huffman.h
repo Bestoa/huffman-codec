@@ -30,6 +30,9 @@ struct huffman_file_header {
 // Low 8 bits store the key, high 56 bits store the weight
 #define GEN_TABLE_UNIT(d, f) ((d) | ((f) << 8))
 
+#define LOGE(msg, ...) fprintf(stderr, msg, ## __VA_ARGS__)
+#define LOGI(msg, ...) fprintf(stderr, msg, ## __VA_ARGS__)
+
 #define MAGIC ("HUFFMAN")
 #if defined(DEBUG)
 #define INDENT (8)

@@ -12,11 +12,11 @@ void dump_huffman_tree(struct huffman_node *root, int space)
     if (root->right)
         dump_huffman_tree(root->right, space + INDENT);
     for (i = 0; i < space; i++)
-        printf(" ");
+        LOGI(" ");
     if (!root->left)
-        printf("[%d:%ld]\n", root->value, root->weight);
+        LOGI("[%d:%ld]\n", root->value, root->weight);
     else
-        printf("R:%ld\n", root->weight);
+        LOGI("R:%ld\n", root->weight);
     if (root->left)
         dump_huffman_tree(root->left, space + INDENT);
 }
@@ -25,9 +25,9 @@ void dump_huffman_code_list() {
     int i = 0, j = 0;
     for (i = 0; i < TABLE_SIZE; i++) {
         if (huffman_code_list[i].length != 0) {
-            printf("value = %d, length = %d code = ", i, huffman_code_list[i].length);
+            LOGI("value = %d, length = %d code = ", i, huffman_code_list[i].length);
             for (j = 0; j < huffman_code_list[i].length; j++) {
-                printf("%d", huffman_code_list[i].code[j] ? 1 : 0);
+                LOGI("%d", huffman_code_list[i].code[j] ? 1 : 0);
             }
             putchar(10);
         }
@@ -115,7 +115,7 @@ int encode(const char *name) {
 
     ifp = fopen(name, "rb");
     if (!ifp) {
-        printf("Open input file %s failed\n", name);
+        LOGE("Open input file %s failed\n", name);
         return 1;
     }
 
@@ -150,7 +150,7 @@ int encode(const char *name) {
 
     ofp = fopen("out.he", "wb");
     if (!ofp) {
-        printf("Create file failed.\n");
+        LOGE("Create file failed.\n");
         ret = 1;
         goto ERR_CLOSE_INPUT_FILE;
     }
@@ -158,9 +158,9 @@ int encode(const char *name) {
     ZAP(&fh);
     memcpy(fh.magic, MAGIC, sizeof(MAGIC));
     fh.file_size = tree->weight;
-    printf("File size = %lu\n", tree->weight);
+    LOGI("File size = %lu\n", tree->weight);
     fh.table_size = TABLE_SIZE - c;
-    printf("Table size = %u\n", TABLE_SIZE - c);
+    LOGI("Table size = %u\n", TABLE_SIZE - c);
     fwrite(&fh, 1, sizeof(struct huffman_file_header), ofp);
     fwrite(table + c, TABLE_SIZE - c, sizeof(uint64_t), ofp);
 
@@ -198,28 +198,28 @@ int decode(const char *name) {
 
     ifp = fopen(name, "rb");
     if (!ifp) {
-        printf("Open input file %s failed.\n", name);
+        LOGE("Open input file %s failed.\n", name);
         return 1;
     }
 
     if (fread(&fh, sizeof(struct huffman_file_header), 1, ifp) != 1) {
-        printf("Read file header failed.\n");
+        LOGE("Read file header failed.\n");
         ret = 1;
         goto ERR_CLOSE_INPUT_FILE;
     }
     if (strcmp(fh.magic, MAGIC)) {
-        printf("Miss magic number, abort.\n");
+        LOGE("Miss magic number, abort.\n");
         ret = 1;
         goto ERR_CLOSE_INPUT_FILE;
     }
     if (fread(table, sizeof(uint64_t), fh.table_size, ifp) != fh.table_size) {
-        printf("Read table failed.\n");
+        LOGE("Read table failed.\n");
         ret = 1;
         goto ERR_CLOSE_INPUT_FILE;
     }
 
     if (fh.table_size > TABLE_SIZE) {
-        printf("Table size is invalid.\n");
+        LOGE("Table size is invalid.\n");
         ret = 1;
         goto ERR_CLOSE_INPUT_FILE;
     }
@@ -230,7 +230,7 @@ int decode(const char *name) {
 #endif
     ofp = fopen("out.hd", "wb");
     if (!ofp) {
-        printf("Create file filed\n");
+        LOGE("Create file filed\n");
         ret = 1;
         goto ERR_CLOSE_INPUT_FILE;
     }
@@ -238,7 +238,7 @@ int decode(const char *name) {
     while (size < fh.file_size) {
         if (!used_bits) {
             if (feof(ifp)) {
-                printf("Unexpect file end, size = %lu\n", size);
+                LOGE("Unexpect file end, size = %lu\n", size);
                 ret = 1;
                 goto ERR_CLOSE_INPUT_FILE;
             }
@@ -268,7 +268,7 @@ ERR_CLOSE_INPUT_FILE:
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
-        printf("Miss argv.\n");
+        LOGE("Miss argv.\n");
         return 1;
     }
     if (argv[1][0] == 'e') {
@@ -276,7 +276,7 @@ int main(int argc, char *argv[]) {
     } else if (argv[1][0] == 'd') {
         decode(argv[2]);
     } else {
-        printf("Unknown action.\n");
+        LOGE("Unknown action.\n");
     }
     return 0;
 }
