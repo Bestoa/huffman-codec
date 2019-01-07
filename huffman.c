@@ -2,26 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-
-#define ZAP(x) (memset((x), 0, sizeof(*(x))))
-#define SETB(x, b) ((x) |= ((1) << (b)))
-#define RSETB(x, b) ((x) &= (~((1) << (b))))
-#define GETB(x, b) ((x) & (1 << (b)))
-
-#define TABLE_SIZE (256)
-
-struct huffman_node {
-    uint64_t weight;
-    uint8_t value;
-    struct huffman_node *left;
-    struct huffman_node *right;
-};
-
-struct huffman_code {
-    /* Code len should be less than table len */
-    uint8_t code[TABLE_SIZE];
-    uint8_t length;
-}huffman_code_list[TABLE_SIZE];
+#include "huffman.h"
 
 #if defined(DEBUG)
 #define INDENT (8)
@@ -53,6 +34,8 @@ void dump_huffman_code_list() {
     }
 }
 #endif
+
+struct huffman_code huffman_code_list[TABLE_SIZE];
 
 int table_unit_compar(const void *a, const void *b) {
     uint64_t x = *(uint64_t *)a;
@@ -122,16 +105,6 @@ struct huffman_node * build_huffman_tree(uint64_t *table, int size) {
     return p_huffman_node_list[size - 1];
 }
 
-// Low 8 bits store the key, high 56 bits store the weight
-#define GEN_TABLE_UNIT(d, f) ((d) | ((f) << 8))
-
-struct huffman_file_header {
-    char magic[8];
-    uint64_t file_size;
-    uint32_t table_size;
-};
-
-#define MAGIC ("HUFFMAN")
 int encode(const char *name) {
     int c, ret = 0;
     FILE *ifp, *ofp;
@@ -247,6 +220,7 @@ int decode(const char *name) {
 
     if (fh.table_size > TABLE_SIZE) {
         printf("Table size is invalid.\n");
+        ret = 1;
         goto ERR_CLOSE_INPUT_FILE;
     }
 
@@ -291,6 +265,7 @@ ERR_CLOSE_INPUT_FILE:
     fclose(ifp);
     return ret;
 }
+
 int main(int argc, char *argv[]) {
     if (argc < 3) {
         printf("Miss argv.\n");
