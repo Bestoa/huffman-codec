@@ -17,7 +17,7 @@ struct huffman_node {
     struct huffman_node *right;
 };
 
-struct huffman_code { 
+struct huffman_code {
     /* Code len should be less than table len */
     uint8_t code[TABLE_SIZE];
     uint8_t length;
@@ -86,58 +86,43 @@ void generate_huffman_code(struct huffman_node *tree) {
     generate_huffman_code_recusive(tree, code, 0);
 }
 
-void free_huffman_tree(struct huffman_node *root) {
-    if (root->left)
-        free_huffman_tree(root->left);
-    if(root->right)
-        free_huffman_tree(root->right);
-    free(root);
-}
-
 struct huffman_node * build_huffman_tree(uint64_t *table, int size) {
-    struct huffman_node *huffman_node_list[size];
-    int i = 0, j = 0;
+
+    int i = 0, j = 0, first_unused = 0;
+    struct huffman_node *p_huffman_node_list[TABLE_SIZE];
+    // Max node number is 2 * (table size) - 1
+    static struct huffman_node huffman_node_list[TABLE_SIZE * 2];
+
+    ZAP(huffman_node_list);
+
     for (i = 0; i < size; i++) {
-        huffman_node_list[i] = malloc(sizeof(struct huffman_node));
-        if (!huffman_node_list[i]) {
-            printf("OOM\n");
-            while(--i > 0) {
-                free(huffman_node_list[i]);
-            }
-            return NULL;
-        }
-        ZAP(huffman_node_list[i]);
-        huffman_node_list[i]->weight = table[i] >> 8;
-        huffman_node_list[i]->value = table[i] & 0xff;
+        p_huffman_node_list[i] = &huffman_node_list[first_unused++];
+        p_huffman_node_list[i]->weight = table[i] >> 8;
+        p_huffman_node_list[i]->value = table[i] & 0xff;
     }
+
     for (i = 0; i < size - 1; i++) {
-        struct huffman_node *hn = malloc(sizeof(struct huffman_node));
-        if (!hn) {
-            printf("OOM\n");
-            while (i < size) {
-                free_huffman_tree(huffman_node_list[i]);
-                i++;
-            }
-            return NULL;
-        }
-        hn->weight = huffman_node_list[i]->weight + huffman_node_list[i + 1]->weight;
-        hn->left = huffman_node_list[i];
-        hn->right = huffman_node_list[i + 1];
-        huffman_node_list[i + 1] = hn;
-        huffman_node_list[i] = NULL;
-        for (j = i + 1; j < size -1; j++) {
-            if (huffman_node_list[j]->weight > huffman_node_list[j + 1]->weight) {
-                struct huffman_node *node = huffman_node_list[j + 1];
-                huffman_node_list[j + 1] = huffman_node_list[j];
-                huffman_node_list[j] = node;
+        struct huffman_node *p_node = &huffman_node_list[first_unused++];
+        p_node->weight = p_huffman_node_list[i]->weight + p_huffman_node_list[i + 1]->weight;
+        p_node->left = p_huffman_node_list[i];
+        p_node->right = p_huffman_node_list[i + 1];
+        p_huffman_node_list[i + 1] = p_node;
+        p_huffman_node_list[i] = NULL;
+        // Ensure the list is in order
+        for (j = i + 1; j < size - 1; j++) {
+            if (p_huffman_node_list[j]->weight > p_huffman_node_list[j + 1]->weight) {
+                struct huffman_node *node = p_huffman_node_list[j + 1];
+                p_huffman_node_list[j + 1] = p_huffman_node_list[j];
+                p_huffman_node_list[j] = node;
             } else {
                 break;
             }
         }
     }
-    return huffman_node_list[size - 1];
+    return p_huffman_node_list[size - 1];
 }
 
+// Low 8 bits store the key, high 56 bits store the weight
 #define GEN_TABLE_UNIT(d, f) ((d) | ((f) << 8))
 
 struct huffman_file_header {
@@ -171,19 +156,16 @@ int encode(const char *name) {
         table[c] = GEN_TABLE_UNIT(c, table[c]);
     }
     qsort(table, TABLE_SIZE, sizeof(uint64_t), table_unit_compar);
+    // Find the first non-zero value.
     for (c = 0; c < TABLE_SIZE; c++)
         if (table[c] >> 8)
             break;
+    // Need 2 units at least
     if (c > TABLE_SIZE - 2) {
         c = TABLE_SIZE - 2;
     }
 
     tree = build_huffman_tree(table + c, TABLE_SIZE - c);
-    if (!tree) {
-        printf("Create huffman tree failed\n");
-        ret = 1;
-        goto ERR_CLOSE_INPUT_FILE;
-    }
 #ifdef DEBUG
     dump_huffman_tree(tree, 0);
 #endif
@@ -197,7 +179,7 @@ int encode(const char *name) {
     if (!ofp) {
         printf("Create file failed.\n");
         ret = 1;
-        goto ERR_CLEAN_HUFFMAN_CODE_LIST;
+        goto ERR_CLOSE_INPUT_FILE;
     }
 
     ZAP(&fh);
@@ -227,9 +209,6 @@ int encode(const char *name) {
     if (used_bits)
         fputc(cached_c, ofp);
     fclose(ofp);
-ERR_CLEAN_HUFFMAN_CODE_LIST:
-    clean_huffman_code_list();
-    free_huffman_tree(tree);
 ERR_CLOSE_INPUT_FILE:
     fclose(ifp);
     return ret;
@@ -266,12 +245,12 @@ int decode(const char *name) {
         goto ERR_CLOSE_INPUT_FILE;
     }
 
-    tree = build_huffman_tree(table, fh.table_size);
-    if (!tree) {
-        printf("Build huffman tree failed.\n");
-        ret = 1;
+    if (fh.table_size > TABLE_SIZE) {
+        printf("Table size is invalid.\n");
         goto ERR_CLOSE_INPUT_FILE;
     }
+
+    tree = build_huffman_tree(table, fh.table_size);
 #ifdef DEBUG
     dump_huffman_tree(tree, 0);
 #endif
@@ -279,7 +258,7 @@ int decode(const char *name) {
     if (!ofp) {
         printf("Create file filed\n");
         ret = 1;
-        goto ERR_FREE_HUFFMAN_TREE;
+        goto ERR_CLOSE_INPUT_FILE;
     }
     walk = tree;
     while (size < fh.file_size) {
@@ -287,7 +266,7 @@ int decode(const char *name) {
             if (feof(ifp)) {
                 printf("Unexpect file end, size = %lu\n", size);
                 ret = 1;
-                goto ERR_FREE_HUFFMAN_TREE;
+                goto ERR_CLOSE_INPUT_FILE;
             }
             cached_c = fgetc(ifp);
         }
@@ -308,8 +287,6 @@ int decode(const char *name) {
         }
     }
     fclose(ofp);
-ERR_FREE_HUFFMAN_TREE:
-    free_huffman_tree(tree);
 ERR_CLOSE_INPUT_FILE:
     fclose(ifp);
     return ret;
