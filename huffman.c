@@ -113,7 +113,7 @@ int encode(const char *name) {
     struct huffman_node *tree = NULL;
     struct huffman_file_header fh;
 
-    ifp = fopen(name, "r");
+    ifp = fopen(name, "rb");
     if (!ifp) {
         printf("Open input file %s failed\n", name);
         return 1;
@@ -196,7 +196,7 @@ int decode(const char *name) {
     struct huffman_file_header fh;
     struct huffman_node *tree = NULL,*walk;
 
-    ifp = fopen(name, "r");
+    ifp = fopen(name, "rb");
     if (!ifp) {
         printf("Open input file %s failed.\n", name);
         return 1;
