@@ -9,14 +9,13 @@ Very simple 8 bits huffman encoder/decoder.
 
 ## Usage
 Encoder a file:
-```
+```shell
 ./huffman -e input [output]
 ```
 
 Decode a file:
-```
+```shell
 ./huffman -d input [output]
 ```
 
 If don't specify the output, output will be the stdout.
-
