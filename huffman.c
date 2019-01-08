@@ -105,7 +105,7 @@ struct huffman_node * build_huffman_tree(uint64_t *table, int size) {
     return p_huffman_node_list[size - 1];
 }
 
-int encode(const char *name) {
+int encode(const char *input_file, const char *output_file) {
     int c, ret = 0;
     FILE *ifp, *ofp;
     uint8_t cached_c = 0, used_bits = 0;
@@ -113,9 +113,9 @@ int encode(const char *name) {
     struct huffman_node *tree = NULL;
     struct huffman_file_header fh;
 
-    ifp = fopen(name, "rb");
+    ifp = fopen(input_file, "rb");
     if (!ifp) {
-        LOGE("Open input file %s failed\n", name);
+        LOGE("Open input file %s failed\n", input_file);
         return 1;
     }
 
@@ -148,7 +148,11 @@ int encode(const char *name) {
     dump_huffman_code_list();
 #endif
 
-    ofp = fopen("out.he", "wb");
+    if (!output_file) {
+        ofp = stdout;
+    } else {
+        ofp = fopen(output_file, "wb");
+    }
     if (!ofp) {
         LOGE("Create file failed.\n");
         ret = 1;
@@ -187,7 +191,7 @@ ERR_CLOSE_INPUT_FILE:
     return ret;
 }
 
-int decode(const char *name) {
+int decode(const char *input_file, const char *output_file) {
     int ret = 0;
     int cached_c = 0, used_bits = 0;
     FILE *ifp, *ofp;
@@ -196,9 +200,9 @@ int decode(const char *name) {
     struct huffman_file_header fh;
     struct huffman_node *tree = NULL,*walk;
 
-    ifp = fopen(name, "rb");
+    ifp = fopen(input_file, "rb");
     if (!ifp) {
-        LOGE("Open input file %s failed.\n", name);
+        LOGE("Open input file %s failed.\n", input_file);
         return 1;
     }
 
@@ -228,7 +232,11 @@ int decode(const char *name) {
 #ifdef DEBUG
     dump_huffman_tree(tree, 0);
 #endif
-    ofp = fopen("out.hd", "wb");
+    if (!output_file) {
+        ofp = stdout;
+    } else {
+        ofp = fopen(output_file, "wb");
+    }
     if (!ofp) {
         LOGE("Create file filed\n");
         ret = 1;
@@ -267,14 +275,21 @@ ERR_CLOSE_INPUT_FILE:
 }
 
 int main(int argc, char *argv[]) {
+    char *input, *output;
     if (argc < 3) {
-        LOGE("Miss argv.\n");
+        LOGE("Miss args.\n");
+        LOGE("Usage: -d/-e input [output]\n");
         return 1;
     }
-    if (argv[1][0] == 'e') {
-        encode(argv[2]);
-    } else if (argv[1][0] == 'd') {
-        decode(argv[2]);
+    input = argv[2];
+    output = NULL;
+    if (argc > 3) {
+        output = argv[3];
+    }
+    if (!strcmp(argv[1], "-e")) {
+        encode(input, output);
+    } else if (!strcmp(argv[1], "-d")) {
+        decode(input, output);
     } else {
         LOGE("Unknown action.\n");
     }

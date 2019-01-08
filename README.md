@@ -8,13 +8,13 @@ Very simple 8 bits huffman encoder/decoder.
 ## Usage
 Encoder a file:
 ```
-./huffman e filename
+./huffman -e input [output]
 ```
-Output is "out.he"
 
 Decode a file:
 ```
-./huffman d filename
+./huffman -d input [output]
 ```
-Output is "out.hd"
+
+If don't specify the output, output will be the stdout.
 
