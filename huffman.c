@@ -105,25 +105,91 @@ struct huffman_node * build_huffman_tree(uint64_t *table, int size) {
     return p_huffman_node_list[size - 1];
 }
 
-int encode(const char *input_file, const char *output_file) {
-    int c, ret = 0;
-    FILE *ifp, *ofp;
+int file_eof(void *handle) {
+    return feof((FILE *)handle);
+}
+
+int file_read(void *handle, void *buffer, size_t len) {
+    int ret = 0, c;
+    if (len == 1) {
+        c = fgetc((FILE *)handle);
+        *(int *)buffer = c;
+        if (c == EOF)
+            ret = 0;
+        else
+            ret = 1;
+    } else {
+        ret = fread(buffer, 1, len, (FILE *)handle);
+    }
+    return ret;
+}
+
+int file_write(void *handle, void *data, size_t len) {
+    int ret = 0, c;
+    if (len == 1) {
+        c = fputc(*(char *)data, (FILE *)handle);
+        if (c == EOF)
+            ret = 0;
+        else
+            ret = 1;
+    } else {
+        ret = fwrite(data, 1, len, (FILE *)handle);
+    }
+    return ret;
+}
+
+int file_rewind(void *handle) {
+    rewind((FILE *)handle);
+    return 0;
+}
+
+struct buffer_ops * create_file_buffer_ops(const char *file_name, const char *mode) {
+    struct buffer_ops *ops = malloc(sizeof(struct buffer_ops));
+    FILE *fp;
+    if (!ops)
+        return ops;
+
+    if (!file_name)
+        fp = stdout;
+    else
+        fp = fopen(file_name, mode);
+    if (!fp)
+        goto FREE_OPS;
+    ops->handle = fp;
+    ops->eof = file_eof;
+    ops->read = file_read;
+    ops->write = file_write;
+    ops->rewind = file_rewind;
+    return ops;
+FREE_OPS:
+    free(ops);
+    return NULL;
+}
+
+void desotry_file_buffer_ops(struct buffer_ops *ops) {
+    if (ops->handle && ops->handle != stderr && ops->handle != stdin)
+        fclose(ops->handle);
+    free(ops);
+}
+
+
+int encode(struct buffer_ops *in, struct buffer_ops *out) {
+
+    int c;
     uint8_t cached_c = 0, used_bits = 0;
     uint64_t table[TABLE_SIZE] = { 0 };
     struct huffman_node *tree = NULL;
     struct huffman_file_header fh;
+    void * hin, *hout;
 
-    ifp = fopen(input_file, "rb");
-    if (!ifp) {
-        LOGE("Open input file %s failed\n", input_file);
-        return 1;
-    }
+    hin = in->handle;
+    hout = out->handle;
 
-    while(!feof(ifp)) {
-        c= fgetc(ifp);
+    while(!in->eof(hin)) {
+        in->read(hin, &c, 1);
         table[c]++;
     }
-    fseek(ifp, 0L, SEEK_SET);
+    in->rewind(hin);
 
     for (c = 0; c < TABLE_SIZE; c++) {
         table[c] = GEN_TABLE_UNIT(c, table[c]);
@@ -148,109 +214,99 @@ int encode(const char *input_file, const char *output_file) {
     dump_huffman_code_list();
 #endif
 
-    if (!output_file) {
-        ofp = stdout;
-    } else {
-        ofp = fopen(output_file, "wb");
-    }
-    if (!ofp) {
-        LOGE("Create file failed.\n");
-        ret = 1;
-        goto ERR_CLOSE_INPUT_FILE;
-    }
-
     ZAP(&fh);
     memcpy(fh.magic, MAGIC, sizeof(MAGIC));
     fh.file_size = tree->weight;
     LOGI("File size = %lu\n", tree->weight);
     fh.table_size = TABLE_SIZE - c;
     LOGI("Table size = %u\n", TABLE_SIZE - c);
-    fwrite(&fh, 1, sizeof(struct huffman_file_header), ofp);
-    fwrite(table + c, TABLE_SIZE - c, sizeof(uint64_t), ofp);
+    out->write(hout, &fh, sizeof(struct huffman_file_header));
+    out->write(hout, table + c, (TABLE_SIZE - c) * sizeof(uint64_t));
 
-    while (!feof(ifp)) {
+    while (!in->eof(hin)) {
         int i = 0;
-        c = fgetc(ifp);
+        in->read(hin, &c, 1);
         for (i = 0; i < huffman_code_list[c].length; i++) {
             if (huffman_code_list[c].code[i]) {
                 SETB(cached_c, 7 - used_bits);
             }
             used_bits++;
             if (used_bits == 8) {
-                fputc(cached_c, ofp);
+                out->write(hout, &cached_c, 1);
                 used_bits = 0;
                 cached_c = 0;
             }
         }
     }
     if (used_bits)
-        fputc(cached_c, ofp);
-    fclose(ofp);
-ERR_CLOSE_INPUT_FILE:
-    fclose(ifp);
-    return ret;
+        out->write(hout, &cached_c, 1);
+
+    return 0;
 }
 
-int decode(const char *input_file, const char *output_file) {
-    int ret = 0;
+int file_encode(const char *input_file, const char *output_file) {
+
+    struct buffer_ops *in, *out;
+
+    in = create_file_buffer_ops(input_file, "rb");
+    if (!in) {
+        LOGE("Create input file ops failed\n");
+        return 1;
+    }
+    out = create_file_buffer_ops(output_file, "wb");
+    if (!out) {
+        LOGE("Create input file ops failed\n");
+        goto OUT;
+    }
+    encode(in, out);
+    desotry_file_buffer_ops(out);
+OUT:
+    desotry_file_buffer_ops(in);
+    return 0;
+}
+
+int decode(struct buffer_ops *in, struct buffer_ops *out) {
     int cached_c = 0, used_bits = 0;
-    FILE *ifp, *ofp;
+    void * hin, *hout;
     uint64_t table[TABLE_SIZE] = { 0 };
     uint64_t size = 0;
     struct huffman_file_header fh;
     struct huffman_node *tree = NULL,*walk;
 
-    ifp = fopen(input_file, "rb");
-    if (!ifp) {
-        LOGE("Open input file %s failed.\n", input_file);
-        return 1;
-    }
+    hin = in->handle;
+    hout = out->handle;
 
-    if (fread(&fh, sizeof(struct huffman_file_header), 1, ifp) != 1) {
+    if (in->read(hin, &fh, sizeof(fh)) != sizeof(fh)) {
         LOGE("Read file header failed.\n");
-        ret = 1;
-        goto ERR_CLOSE_INPUT_FILE;
+        return 1;
     }
     if (strcmp(fh.magic, MAGIC)) {
         LOGE("Miss magic number, abort.\n");
-        ret = 1;
-        goto ERR_CLOSE_INPUT_FILE;
+        return 1;
     }
-    if (fread(table, sizeof(uint64_t), fh.table_size, ifp) != fh.table_size) {
+    if (in->read(hin, table, sizeof(uint64_t) * fh.table_size) != fh.table_size * sizeof(uint64_t)) {
         LOGE("Read table failed.\n");
-        ret = 1;
-        goto ERR_CLOSE_INPUT_FILE;
+        return 1;
     }
 
     if (fh.table_size > TABLE_SIZE) {
         LOGE("Table size is invalid.\n");
-        ret = 1;
-        goto ERR_CLOSE_INPUT_FILE;
+        return 1;
     }
 
     tree = build_huffman_tree(table, fh.table_size);
 #ifdef DEBUG
     dump_huffman_tree(tree, 0);
 #endif
-    if (!output_file) {
-        ofp = stdout;
-    } else {
-        ofp = fopen(output_file, "wb");
-    }
-    if (!ofp) {
-        LOGE("Create file filed\n");
-        ret = 1;
-        goto ERR_CLOSE_INPUT_FILE;
-    }
+
     walk = tree;
     while (size < fh.file_size) {
         if (!used_bits) {
-            if (feof(ifp)) {
+            if (in->eof(hin)) {
                 LOGE("Unexpect file end, size = %lu\n", size);
-                ret = 1;
-                goto ERR_CLOSE_INPUT_FILE;
+                return 1;
             }
-            cached_c = fgetc(ifp);
+            in->read(hin, &cached_c, 1);
         }
 
         if (GETB(cached_c, 7 - used_bits))
@@ -263,15 +319,33 @@ int decode(const char *input_file, const char *output_file) {
             used_bits = 0;
 
         if (!walk->left) {
-            fputc(walk->value, ofp);
+            out->write(hout, &walk->value, 1);
             walk = tree;
             size++;
         }
     }
-    fclose(ofp);
-ERR_CLOSE_INPUT_FILE:
-    fclose(ifp);
-    return ret;
+    return 0;
+}
+
+int file_decode(const char *input_file, const char *output_file) {
+
+    struct buffer_ops *in, *out;
+
+    in = create_file_buffer_ops(input_file, "rb");
+    if (!in) {
+        LOGE("Create input file ops failed\n");
+        return 1;
+    }
+    out = create_file_buffer_ops(output_file, "wb");
+    if (!out) {
+        LOGE("Create input file ops failed\n");
+        goto OUT;
+    }
+    decode(in, out);
+    desotry_file_buffer_ops(out);
+OUT:
+    desotry_file_buffer_ops(in);
+    return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -287,9 +361,9 @@ int main(int argc, char *argv[]) {
         output = argv[3];
     }
     if (!strcmp(argv[1], "-e")) {
-        encode(input, output);
+        file_encode(input, output);
     } else if (!strcmp(argv[1], "-d")) {
-        decode(input, output);
+        file_decode(input, output);
     } else {
         LOGE("Unknown action.\n");
     }

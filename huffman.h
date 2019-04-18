@@ -27,6 +27,15 @@ struct huffman_file_header {
     uint32_t table_size;
 };
 
+struct buffer_ops {
+    void *handle;
+    int (*eof)(void *handle);
+    int (*read)(void *handle, void *buffer, size_t);
+    int (*write)(void *handle, void *data, size_t);
+    int (*rewind)(void *);
+    void *priv_data;
+};
+
 // Low 8 bits store the key, high 56 bits store the weight
 #define GEN_TABLE_UNIT(d, f) ((d) | ((f) << 8))
 
