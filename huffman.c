@@ -47,7 +47,7 @@ int table_unit_compar(const void *a, const void *b) {
 }
 
 void clean_code_list(struct huffman_code *code_list) {
-    ZAP(code_list);
+    ZAP(code_list, TABLE_SIZE);
 }
 
 void generate_huffman_code_recusive(struct huffman_code *code_list, struct huffman_node *tree, char *code, int len) {
@@ -70,37 +70,48 @@ void generate_huffman_code(struct huffman_code * code_list, struct huffman_node 
 struct huffman_node * build_huffman_tree(uint64_t *table, int size) {
 
     int i = 0, j = 0, first_unused = 0;
-    struct huffman_node *p_huffman_node_list[TABLE_SIZE];
+    struct huffman_node *p_tree[TABLE_SIZE];
     // Max node number is 2 * (table size) - 1
-    static struct huffman_node huffman_node_list[TABLE_SIZE * 2];
+    struct huffman_node *huffman_node_list = malloc(TABLE_SIZE * 2 * sizeof(struct huffman_node));
 
-    ZAP(huffman_node_list);
+    if (huffman_node_list == NULL) {
+        LOGE("OOM.\n");
+        return NULL;
+    }
+
+    ZAP(huffman_node_list, TABLE_SIZE * 2 * sizeof(struct huffman_node));
 
     for (i = 0; i < size; i++) {
-        p_huffman_node_list[i] = &huffman_node_list[first_unused++];
-        p_huffman_node_list[i]->weight = table[i] >> 8;
-        p_huffman_node_list[i]->value = table[i] & 0xff;
+        p_tree[i] = &huffman_node_list[first_unused++];
+        p_tree[i]->weight = table[i] >> 8;
+        p_tree[i]->value = table[i] & 0xff;
     }
 
     for (i = 0; i < size - 1; i++) {
         struct huffman_node *p_node = &huffman_node_list[first_unused++];
-        p_node->weight = p_huffman_node_list[i]->weight + p_huffman_node_list[i + 1]->weight;
-        p_node->left = p_huffman_node_list[i];
-        p_node->right = p_huffman_node_list[i + 1];
-        p_huffman_node_list[i + 1] = p_node;
-        p_huffman_node_list[i] = NULL;
+        p_node->weight = p_tree[i]->weight + p_tree[i + 1]->weight;
+        p_node->left = p_tree[i];
+        p_node->right = p_tree[i + 1];
+        p_tree[i + 1] = p_node;
+        p_tree[i] = NULL;
         // Ensure the list is in order
         for (j = i + 1; j < size - 1; j++) {
-            if (p_huffman_node_list[j]->weight > p_huffman_node_list[j + 1]->weight) {
-                struct huffman_node *node = p_huffman_node_list[j + 1];
-                p_huffman_node_list[j + 1] = p_huffman_node_list[j];
-                p_huffman_node_list[j] = node;
+            if (p_tree[j]->weight > p_tree[j + 1]->weight) {
+                struct huffman_node *node = p_tree[j + 1];
+                p_tree[j + 1] = p_tree[j];
+                p_tree[j] = node;
             } else {
                 break;
             }
         }
     }
-    return p_huffman_node_list[size - 1];
+    p_tree[size - 1]->__free_handle = huffman_node_list;
+    return p_tree[size - 1];
+}
+
+void desotry_huffman_tree(struct huffman_node * p_tree) {
+    if (p_tree->__free_handle != NULL)
+        free(p_tree->__free_handle);
 }
 
 int file_eof(void *handle) {
@@ -205,6 +216,8 @@ int encode(struct buffer_ops *in, struct buffer_ops *out) {
     }
 
     tree = build_huffman_tree(table + c, TABLE_SIZE - c);
+    if (!tree)
+        return 1;
 #ifdef DEBUG
     dump_huffman_tree(tree, 0);
 #endif
@@ -214,7 +227,7 @@ int encode(struct buffer_ops *in, struct buffer_ops *out) {
     dump_code_list(code_list);
 #endif
 
-    ZAP(&fh);
+    ZAP(&fh, sizeof(fh));
     memcpy(fh.magic, MAGIC, sizeof(MAGIC));
     fh.file_size = tree->weight;
     LOGI("File size = %lu\n", tree->weight);
@@ -240,6 +253,8 @@ int encode(struct buffer_ops *in, struct buffer_ops *out) {
     }
     if (used_bits)
         out->write(hout, &cached_c, 1);
+
+    desotry_huffman_tree(tree);
 
     return 0;
 }
@@ -295,6 +310,8 @@ int decode(struct buffer_ops *in, struct buffer_ops *out) {
     }
 
     tree = build_huffman_tree(table, fh.table_size);
+    if (!tree)
+        return 1;
 #ifdef DEBUG
     dump_huffman_tree(tree, 0);
 #endif
@@ -324,6 +341,7 @@ int decode(struct buffer_ops *in, struct buffer_ops *out) {
             size++;
         }
     }
+    desotry_huffman_tree(tree);
     return 0;
 }
 

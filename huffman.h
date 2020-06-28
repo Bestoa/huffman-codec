@@ -1,7 +1,7 @@
 #ifndef __HUNFFMAN_H__
 #define __HUNFFMAN_H__
 
-#define ZAP(x) (memset((x), 0, sizeof(*(x))))
+#define ZAP(x, len) (memset((x), 0, (len)))
 #define SETB(x, b) ((x) |= ((1) << (b)))
 #define RSETB(x, b) ((x) &= (~((1) << (b))))
 #define GETB(x, b) ((x) & (1 << (b)))
@@ -13,6 +13,8 @@ struct huffman_node {
     uint8_t value;
     struct huffman_node *left;
     struct huffman_node *right;
+    /* record the old root node here */
+    struct huffman_node *__free_handle;
 };
 
 struct huffman_code {
