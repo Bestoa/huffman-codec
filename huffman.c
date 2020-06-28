@@ -21,21 +21,19 @@ void dump_huffman_tree(struct huffman_node *root, int space)
         dump_huffman_tree(root->left, space + INDENT);
 }
 
-void dump_huffman_code_list() {
+void dump_code_list(struct huffman_code *code_list) {
     int i = 0, j = 0;
     for (i = 0; i < TABLE_SIZE; i++) {
-        if (huffman_code_list[i].length != 0) {
-            LOGI("value = %d, length = %d code = ", i, huffman_code_list[i].length);
-            for (j = 0; j < huffman_code_list[i].length; j++) {
-                LOGI("%d", huffman_code_list[i].code[j] ? 1 : 0);
+        if (code_list[i].length != 0) {
+            LOGI("value = %d, length = %d code = ", i, code_list[i].length);
+            for (j = 0; j < code_list[i].length; j++) {
+                LOGI("%d", code_list[i].code[j] ? 1 : 0);
             }
             putchar(10);
         }
     }
 }
 #endif
-
-struct huffman_code huffman_code_list[TABLE_SIZE];
 
 int table_unit_compar(const void *a, const void *b) {
     uint64_t x = *(uint64_t *)a;
@@ -48,25 +46,25 @@ int table_unit_compar(const void *a, const void *b) {
         return 0;
 }
 
-void clean_huffman_code_list() {
-    ZAP(&huffman_code_list);
+void clean_code_list(struct huffman_code *code_list) {
+    ZAP(code_list);
 }
 
-void generate_huffman_code_recusive(struct huffman_node *tree, char *code, int len) {
+void generate_huffman_code_recusive(struct huffman_code *code_list, struct huffman_node *tree, char *code, int len) {
     if (!tree->left) {
-        memcpy(huffman_code_list[tree->value].code, code, len);
-        huffman_code_list[tree->value].length = len;
+        memcpy(code_list[tree->value].code, code, len);
+        code_list[tree->value].length = len;
         return;
     }
-    generate_huffman_code_recusive(tree->left, code, len + 1);
+    generate_huffman_code_recusive(code_list, tree->left, code, len + 1);
     code[len] = 1;
-    generate_huffman_code_recusive(tree->right, code, len + 1);
+    generate_huffman_code_recusive(code_list, tree->right, code, len + 1);
     code[len] = 0;
 }
 
-void generate_huffman_code(struct huffman_node *tree) {
+void generate_huffman_code(struct huffman_code * code_list, struct huffman_node *tree) {
     char code[TABLE_SIZE] = { 0 };
-    generate_huffman_code_recusive(tree, code, 0);
+    generate_huffman_code_recusive(code_list, tree, code, 0);
 }
 
 struct huffman_node * build_huffman_tree(uint64_t *table, int size) {
@@ -182,6 +180,8 @@ int encode(struct buffer_ops *in, struct buffer_ops *out) {
     struct huffman_file_header fh;
     void * hin, *hout;
 
+    struct huffman_code code_list[TABLE_SIZE];
+
     hin = in->handle;
     hout = out->handle;
 
@@ -208,10 +208,10 @@ int encode(struct buffer_ops *in, struct buffer_ops *out) {
 #ifdef DEBUG
     dump_huffman_tree(tree, 0);
 #endif
-    clean_huffman_code_list();
-    generate_huffman_code(tree);
+    clean_code_list(code_list);
+    generate_huffman_code(code_list, tree);
 #ifdef DEBUG
-    dump_huffman_code_list();
+    dump_code_list(code_list);
 #endif
 
     ZAP(&fh);
@@ -226,8 +226,8 @@ int encode(struct buffer_ops *in, struct buffer_ops *out) {
     while (!in->eof(hin)) {
         int i = 0;
         in->read(hin, &c, 1);
-        for (i = 0; i < huffman_code_list[c].length; i++) {
-            if (huffman_code_list[c].code[i]) {
+        for (i = 0; i < code_list[c].length; i++) {
+            if (code_list[c].code[i]) {
                 SETB(cached_c, 7 - used_bits);
             }
             used_bits++;
