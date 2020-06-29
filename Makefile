@@ -5,7 +5,7 @@ CFLAGS += -O3
 
 .PHONY: all
 all:
-	$(GCC) $(CFLAGS) huffman.c -o huffman
+	$(GCC) $(CFLAGS) *.c -o huffman
 
 .PHONY: clean
 clean:

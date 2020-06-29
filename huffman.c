@@ -114,74 +114,6 @@ void desotry_huffman_tree(struct huffman_node * p_tree) {
         free(p_tree->__free_handle);
 }
 
-int file_eof(void *handle) {
-    return feof((FILE *)handle);
-}
-
-int file_read(void *handle, void *buffer, size_t len) {
-    int ret = 0, c;
-    if (len == 1) {
-        c = fgetc((FILE *)handle);
-        *(int *)buffer = c;
-        if (c == EOF)
-            ret = 0;
-        else
-            ret = 1;
-    } else {
-        ret = fread(buffer, 1, len, (FILE *)handle);
-    }
-    return ret;
-}
-
-int file_write(void *handle, void *data, size_t len) {
-    int ret = 0, c;
-    if (len == 1) {
-        c = fputc(*(char *)data, (FILE *)handle);
-        if (c == EOF)
-            ret = 0;
-        else
-            ret = 1;
-    } else {
-        ret = fwrite(data, 1, len, (FILE *)handle);
-    }
-    return ret;
-}
-
-int file_rewind(void *handle) {
-    rewind((FILE *)handle);
-    return 0;
-}
-
-struct buffer_ops * create_file_buffer_ops(const char *file_name, const char *mode) {
-    struct buffer_ops *ops = malloc(sizeof(struct buffer_ops));
-    FILE *fp;
-    if (!ops)
-        return ops;
-
-    if (!file_name)
-        fp = stdout;
-    else
-        fp = fopen(file_name, mode);
-    if (!fp)
-        goto FREE_OPS;
-    ops->handle = fp;
-    ops->eof = file_eof;
-    ops->read = file_read;
-    ops->write = file_write;
-    ops->rewind = file_rewind;
-    return ops;
-FREE_OPS:
-    free(ops);
-    return NULL;
-}
-
-void desotry_file_buffer_ops(struct buffer_ops *ops) {
-    if (ops->handle && ops->handle != stderr && ops->handle != stdin)
-        fclose(ops->handle);
-    free(ops);
-}
-
-
 int encode(struct buffer_ops *in, struct buffer_ops *out) {
 
     int c;
@@ -259,27 +191,6 @@ int encode(struct buffer_ops *in, struct buffer_ops *out) {
     return 0;
 }
 
-int file_encode(const char *input_file, const char *output_file) {
-
-    struct buffer_ops *in, *out;
-
-    in = create_file_buffer_ops(input_file, "rb");
-    if (!in) {
-        LOGE("Create input file ops failed\n");
-        return 1;
-    }
-    out = create_file_buffer_ops(output_file, "wb");
-    if (!out) {
-        LOGE("Create input file ops failed\n");
-        goto OUT;
-    }
-    encode(in, out);
-    desotry_file_buffer_ops(out);
-OUT:
-    desotry_file_buffer_ops(in);
-    return 0;
-}
-
 int decode(struct buffer_ops *in, struct buffer_ops *out) {
     int cached_c = 0, used_bits = 0;
     void * hin, *hout;
@@ -342,48 +253,5 @@ int decode(struct buffer_ops *in, struct buffer_ops *out) {
         }
     }
     desotry_huffman_tree(tree);
-    return 0;
-}
-
-int file_decode(const char *input_file, const char *output_file) {
-
-    struct buffer_ops *in, *out;
-
-    in = create_file_buffer_ops(input_file, "rb");
-    if (!in) {
-        LOGE("Create input file ops failed\n");
-        return 1;
-    }
-    out = create_file_buffer_ops(output_file, "wb");
-    if (!out) {
-        LOGE("Create input file ops failed\n");
-        goto OUT;
-    }
-    decode(in, out);
-    desotry_file_buffer_ops(out);
-OUT:
-    desotry_file_buffer_ops(in);
-    return 0;
-}
-
-int main(int argc, char *argv[]) {
-    char *input, *output;
-    if (argc < 3) {
-        LOGE("Miss args.\n");
-        LOGE("Usage: -d/-e input [output]\n");
-        return 1;
-    }
-    input = argv[2];
-    output = NULL;
-    if (argc > 3) {
-        output = argv[3];
-    }
-    if (!strcmp(argv[1], "-e")) {
-        file_encode(input, output);
-    } else if (!strcmp(argv[1], "-d")) {
-        file_decode(input, output);
-    } else {
-        LOGE("Unknown action.\n");
-    }
     return 0;
 }

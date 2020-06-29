@@ -1,6 +1,10 @@
 #ifndef __HUNFFMAN_H__
 #define __HUNFFMAN_H__
 
+#include <stdint.h>
+#include <stddef.h>
+#include <stdio.h>
+
 #define ZAP(x, len) (memset((x), 0, (len)))
 #define SETB(x, b) ((x) |= ((1) << (b)))
 #define RSETB(x, b) ((x) &= (~((1) << (b))))
@@ -37,6 +41,9 @@ struct buffer_ops {
     int (*rewind)(void *);
     void *priv_data;
 };
+
+int encode(struct buffer_ops *in, struct buffer_ops *out);
+int decode(struct buffer_ops *in, struct buffer_ops *out);
 
 // Low 8 bits store the key, high 56 bits store the weight
 #define GEN_TABLE_UNIT(d, f) ((d) | ((f) << 8))
