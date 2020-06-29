@@ -34,11 +34,11 @@ struct huffman_file_header {
 };
 
 struct buffer_ops {
-    void *handle;
-    int (*eof)(void *handle);
-    int (*read)(void *handle, void *buffer, size_t);
-    int (*write)(void *handle, void *data, size_t);
-    int (*rewind)(void *);
+    void *data;
+    int (*eof)(struct buffer_ops *handle);
+    int (*read)(struct buffer_ops *handle, void *buffer, size_t);
+    int (*write)(struct buffer_ops *handle, void *data, size_t);
+    int (*rewind)(struct buffer_ops *handle);
     void *priv_data;
 };
 

@@ -121,18 +121,13 @@ int encode(struct buffer_ops *in, struct buffer_ops *out) {
     uint64_t table[TABLE_SIZE] = { 0 };
     struct huffman_node *tree = NULL;
     struct huffman_file_header fh;
-    void * hin, *hout;
-
     struct huffman_code code_list[TABLE_SIZE];
 
-    hin = in->handle;
-    hout = out->handle;
-
-    while(!in->eof(hin)) {
-        in->read(hin, &c, 1);
+    while(!in->eof(in)) {
+        in->read(in, &c, 1);
         table[c]++;
     }
-    in->rewind(hin);
+    in->rewind(in);
 
     for (c = 0; c < TABLE_SIZE; c++) {
         table[c] = GEN_TABLE_UNIT(c, table[c]);
@@ -165,26 +160,26 @@ int encode(struct buffer_ops *in, struct buffer_ops *out) {
     LOGI("File size = %lu\n", tree->weight);
     fh.table_size = TABLE_SIZE - c;
     LOGI("Table size = %u\n", TABLE_SIZE - c);
-    out->write(hout, &fh, sizeof(struct huffman_file_header));
-    out->write(hout, table + c, (TABLE_SIZE - c) * sizeof(uint64_t));
+    out->write(out, &fh, sizeof(struct huffman_file_header));
+    out->write(out, table + c, (TABLE_SIZE - c) * sizeof(uint64_t));
 
-    while (!in->eof(hin)) {
+    while (!in->eof(in)) {
         int i = 0;
-        in->read(hin, &c, 1);
+        in->read(in, &c, 1);
         for (i = 0; i < code_list[c].length; i++) {
             if (code_list[c].code[i]) {
                 SETB(cached_c, 7 - used_bits);
             }
             used_bits++;
             if (used_bits == 8) {
-                out->write(hout, &cached_c, 1);
+                out->write(out, &cached_c, 1);
                 used_bits = 0;
                 cached_c = 0;
             }
         }
     }
     if (used_bits)
-        out->write(hout, &cached_c, 1);
+        out->write(out, &cached_c, 1);
 
     desotry_huffman_tree(tree);
 
@@ -193,16 +188,12 @@ int encode(struct buffer_ops *in, struct buffer_ops *out) {
 
 int decode(struct buffer_ops *in, struct buffer_ops *out) {
     int cached_c = 0, used_bits = 0;
-    void * hin, *hout;
     uint64_t table[TABLE_SIZE] = { 0 };
     uint64_t size = 0;
     struct huffman_file_header fh;
     struct huffman_node *tree = NULL,*walk;
 
-    hin = in->handle;
-    hout = out->handle;
-
-    if (in->read(hin, &fh, sizeof(fh)) != sizeof(fh)) {
+    if (in->read(in, &fh, sizeof(fh)) != sizeof(fh)) {
         LOGE("Read file header failed.\n");
         return 1;
     }
@@ -210,7 +201,7 @@ int decode(struct buffer_ops *in, struct buffer_ops *out) {
         LOGE("Miss magic number, abort.\n");
         return 1;
     }
-    if (in->read(hin, table, sizeof(uint64_t) * fh.table_size) != fh.table_size * sizeof(uint64_t)) {
+    if (in->read(in, table, sizeof(uint64_t) * fh.table_size) != fh.table_size * sizeof(uint64_t)) {
         LOGE("Read table failed.\n");
         return 1;
     }
@@ -230,11 +221,11 @@ int decode(struct buffer_ops *in, struct buffer_ops *out) {
     walk = tree;
     while (size < fh.file_size) {
         if (!used_bits) {
-            if (in->eof(hin)) {
+            if (in->eof(in)) {
                 LOGE("Unexpect file end, size = %lu\n", size);
                 return 1;
             }
-            in->read(hin, &cached_c, 1);
+            in->read(in, &cached_c, 1);
         }
 
         if (GETB(cached_c, 7 - used_bits))
@@ -247,7 +238,7 @@ int decode(struct buffer_ops *in, struct buffer_ops *out) {
             used_bits = 0;
 
         if (!walk->left) {
-            out->write(hout, &walk->value, 1);
+            out->write(out, &walk->value, 1);
             walk = tree;
             size++;
         }
