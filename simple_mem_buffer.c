@@ -16,7 +16,7 @@ int mem_read(struct buffer_ops *handle, void *buffer, size_t len) {
     struct mem_region *pmr = handle->data;
     if (len + pmr->cur >= pmr->end)
         len = pmr->end - pmr->cur;
-    memcpy(buffer, pmr->data + pmr->cur,  len);
+    memcpy(buffer, pmr->data + pmr->cur, len);
     pmr->cur += len;
     return len;
 }
@@ -25,7 +25,7 @@ int mem_write(struct buffer_ops *handle, void *data , size_t len) {
     struct mem_region *pmr = handle->data;
     if (len + pmr->cur >= pmr->end)
         len = pmr->end - pmr->cur;
-    memcpy(pmr->data + pmr->cur, data , len);
+    memcpy(pmr->data + pmr->cur, data, len);
     pmr->cur += len;
     return len;
 }
