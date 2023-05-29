@@ -1,6 +1,6 @@
 # huffman-codec
 
-[![Codacy Badge](https://api.codacy.com/project/badge/Grade/5a9b713bcb0142e2aeae4de12aebafd6)](https://app.codacy.com/app/Bestoa/huffman-codec?utm_source=github.com&utm_medium=referral&utm_content=Bestoa/huffman-codec&utm_campaign=Badge_Grade_Dashboard)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/0c0fb22d833c426d967503086f881513)](https://app.codacy.com/gh/Bestoa/huffman-codec/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 
 Very simple 8 bits huffman encoder/decoder.
 
